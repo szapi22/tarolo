@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 p-6">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Adminisztráció</h1>
+        <div id="stats" class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-white p-4 rounded shadow">Dobozok: <span id="boxCount">0</span></div>
+            <div class="bg-white p-4 rounded shadow">Tárgyak: <span id="itemCount">0</span></div>
+        </div>
+        <div class="bg-white p-6 rounded shadow">
+            <h2 class="font-bold mb-4">Felhasználók</h2>
+            <table class="w-full text-left">
+                <thead><tr><th>Név</th><th>Email</th><th>Regisztrálva</th></tr></thead>
+                <tbody id="userTable"></tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        const token = localStorage.getItem('token');
+        fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${token}` } })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) return alert(data.error);
+                document.getElementById('boxCount').innerText = data.stats.boxes;
+                document.getElementById('itemCount').innerText = data.stats.items;
+                document.getElementById('userTable').innerHTML = data.users.map(u => 
+                    `<tr><td>${u.username}</td><td>${u.email}</td><td>${u.created_at}</td></tr>`
+                ).join('');
+            });
+    </script>
+</body>
+</html>

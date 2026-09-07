@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doboz Raktár</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 pb-24">
+
+    <!-- AUTH KÉPERNYŐ -->
+    <div id="authScreen" class="max-w-md mx-auto p-6 pt-12">
+        <div class="bg-white p-6 rounded-2xl shadow-md text-center">
+            <h1 class="text-3xl font-extrabold text-indigo-600 mb-2">📦 Raktárkezelő</h1>
+            <p class="text-sm text-gray-500 mb-6">Jelentkezz be a készlet eléréséhez</p>
+
+            <div class="flex border-b mb-4">
+                <button id="loginTabBtn" onclick="switchAuthTab('login')" class="flex-1 py-2 font-semibold border-b-2 border-indigo-600 text-indigo-600">Belépés</button>
+                <button id="regTabBtn" onclick="switchAuthTab('register')" class="flex-1 py-2 font-semibold text-gray-400">Regisztráció</button>
+            </div>
+
+            <form id="authForm" onsubmit="handleAuth(event)" class="space-y-4 text-left">
+                <div>
+                    <label class="text-xs font-semibold text-gray-600">Felhasználónév</label>
+                    <input type="text" id="authUsername" required class="w-full border p-2.5 rounded-lg focus:outline-indigo-500">
+                </div>
+                <div id="emailFieldWrapper" class="hidden">
+                    <label class="text-xs font-semibold text-gray-600">E-mail cím</label>
+                    <input type="email" id="authEmail" class="w-full border p-2.5 rounded-lg focus:outline-indigo-500">
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-gray-600">Jelszó</label>
+                    <input type="password" id="authPassword" required class="w-full border p-2.5 rounded-lg focus:outline-indigo-500">
+                </div>
+                <div id="passwordHintWrapper" class="hidden">
+                    <p class="text-[10px] text-indigo-600 font-medium leading-relaxed">A jelszónak legalább 6 karakterből kell állnia, és tartalmaznia kell kis- és nagybetűt (a-z, A-Z), valamint speciális karaktert.</p>
+                </div>
+                <div id="forgotPasswordLinkWrapper" class="text-right">
+                    <button type="button" onclick="openForgotPassword()" class="text-xs text-indigo-600 font-semibold hover:underline">Elfelejtetted a jelszavad?</button>
+                </div>
+                <button type="submit" id="authSubmitBtn" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow hover:bg-indigo-700">
+                    Bejelentkezés
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- FŐ ALKALMAZÁS -->
+    <div id="appScreen" class="hidden max-w-md mx-auto p-4">
+        <div class="flex justify-between items-center mb-4">
+            <span class="text-sm font-semibold text-gray-600">Szia, <b id="displayUsername" class="text-indigo-600"></b>!</span>
+            <button onclick="logout()" class="text-xs text-red-600 bg-red-50 px-2.5 py-1 rounded-lg font-medium">Kijelentkezés</button>
+        </div>
+
+        <!-- TAB: FŐOLDAL & KERESŐ -->
+        <div id="tabHome">
+            <div class="bg-white p-4 rounded-xl shadow mb-4">
+                <input type="text" id="searchInput" placeholder="Keresés tárgy vagy kategória szerint..." 
+                       class="w-full border p-2.5 rounded-lg focus:outline-indigo-500" oninput="searchItems(this.value)">
+                <div id="searchResults" class="mt-2 divide-y"></div>
+            </div>
+
+            <div class="flex gap-2 mb-4">
+                <button onclick="toggleScanner()" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-semibold shadow hover:bg-indigo-700">
+                    📷 QR Beolvasás
+                </button>
+                <button onclick="showNewBoxModal()" class="bg-slate-700 text-white px-4 py-3 rounded-xl font-semibold shadow">
+                    ➕ Új doboz
+                </button>
+            </div>
+
+            <div id="reader" class="w-full bg-black rounded-xl overflow-hidden mb-4 hidden"></div>
+
+            <!-- Doboz Tartalma -->
+            <div id="boxView" class="hidden bg-white p-4 rounded-xl shadow mb-4">
+                <div class="border-b pb-3 mb-3">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h2 id="boxTitle" class="text-xl font-bold text-slate-800"></h2>
+                            <p id="boxLocation" class="text-sm text-gray-500"></p>
+                        </div>
+                        <div class="flex gap-1">
+                            <button onclick="openEditBoxModal()" class="text-xs bg-indigo-50 text-indigo-600 font-semibold px-2 py-1.5 rounded hover:bg-indigo-100">✏️ Módosítás</button>
+                            <button onclick="showQRCode()" class="text-xs bg-gray-100 text-gray-700 font-semibold px-2 py-1.5 rounded hover:bg-gray-200">QR Kód</button>
+                            <button onclick="deleteBox()" class="text-xs bg-red-50 text-red-600 font-semibold px-2 py-1.5 rounded hover:bg-red-100">🗑 Törlés</button>
+                        </div>
+                    </div>
+                    <p id="boxDescription" class="text-xs text-gray-600 mt-2 italic bg-slate-50 p-2 rounded hidden"></p>
+                    <p id="boxCode" class="text-[11px] font-mono text-gray-400 mt-2"></p>
+                </div>
+
+                <div id="itemList" class="space-y-3 mb-4"></div>
+
+                <button onclick="showAddItemModal()" class="w-full bg-emerald-600 text-white py-2.5 rounded-lg font-medium shadow">
+                    + Új tárgy hozzáadása
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB: TÁROLÓK LISTÁJA -->
+        <div id="tabBoxes" class="hidden">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-lg font-bold">Tárolóim (<span id="boxCount">0</span>)</h2>
+                <button onclick="loadBoxesList()" class="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded">🔄 Frissítés</button>
+            </div>
+            <div id="allBoxesList" class="space-y-3"></div>
+        </div>
+    </div>
+
+    <!-- ALSÓ MENÜSÁV -->
+    <div id="bottomNav" class="hidden fixed bottom-0 left-0 right-0 bg-white border-t py-2 px-6 flex justify-around max-w-md mx-auto z-40">
+        <button onclick="switchAppTab('home')" id="navHomeBtn" class="flex flex-col items-center text-indigo-600 font-medium text-xs">
+            <span class="text-lg">🔍</span> Keresés / QR
+        </button>
+        <button onclick="switchAppTab('boxes')" id="navBoxesBtn" class="flex flex-col items-center text-gray-400 font-medium text-xs">
+            <span class="text-lg">📦</span> Tárolók listája
+        </button>
+    </div>
+
+    <!-- MODAL: Új Doboz / Doboz Szerkesztése -->
+    <div id="boxModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-2xl w-full max-w-sm">
+            <h3 id="boxModalTitle" class="font-bold text-lg mb-3">Új doboz felvétele</h3>
+            <div class="space-y-3">
+                <input type="hidden" id="editBoxId" value="">
+                <input type="text" id="boxNameInput" placeholder="Doboz neve (pl. Műhely / Fiók 1)" class="w-full border p-2 rounded-lg">
+                <input type="text" id="boxLocInput" placeholder="Helyszín (pl. Polc 3, Garázs)" class="w-full border p-2 rounded-lg">
+                <textarea id="boxDescInput" placeholder="Megjegyzés a tárolóhoz (opcionális)" class="w-full border p-2 rounded-lg text-sm"></textarea>
+                <div id="customCodeWrapper">
+                    <input type="text" id="boxCustomCodeInput" placeholder="Egyedi QR kód (ha meglévőt ragasztasz)" class="w-full border p-2 rounded-lg font-mono text-sm">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-4">
+                <button onclick="document.getElementById('boxModal').classList.add('hidden')" class="px-4 py-2 text-gray-600">Mégse</button>
+                <button onclick="saveBox()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium">Mentés</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Tárgy hozzáadása / szerkesztése -->
+    <div id="itemModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
+            <h3 id="itemModalTitle" class="font-bold text-lg mb-3">Tárgy hozzáadása</h3>
+            <form id="itemForm" class="space-y-3">
+                <input type="hidden" id="editItemId" value="">
+                <input type="text" id="itemName" name="name" placeholder="Tárgy neve" required class="w-full border p-2 rounded-lg">
+                <input type="number" id="itemQty" name="quantity" value="1" min="0" placeholder="Darabszám" class="w-full border p-2 rounded-lg">
+                <input type="text" id="itemCat" name="category" placeholder="Kategória" class="w-full border p-2 rounded-lg">
+                <input type="text" id="itemCond" name="item_condition" placeholder="Állapot (pl. Új, Használt)" class="w-full border p-2 rounded-lg">
+                <textarea id="itemDesc" name="description" placeholder="Megjegyzés" class="w-full border p-2 rounded-lg"></textarea>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Fotó módosítása / feltöltése:</label>
+                    <input type="file" name="photo" accept="image/*" class="w-full text-sm">
+                    <input type="file" name="photo" accept="image/*" capture="environment" class="w-full text-sm">
+
+                </div>
+            </form>
+            <div class="flex justify-between mt-4">
+                <button id="deleteItemBtn" onclick="deleteItem()" class="hidden px-4 py-2 text-red-600 font-medium">Tárgy törlése</button>
+                <div class="flex justify-end gap-2 ml-auto">
+                    <button onclick="document.getElementById('itemModal').classList.add('hidden')" class="px-4 py-2 text-gray-600">Mégse</button>
+                    <button onclick="submitItemForm()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium">Mentés</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: QR kód megjelenítés -->
+    <div id="qrModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-2xl flex flex-col items-center">
+            <div id="qrcodeCanvas"></div>
+            <button onclick="document.getElementById('qrModal').classList.add('hidden')" class="mt-4 bg-gray-800 text-white px-6 py-2 rounded-lg font-medium">Bezárás</button>
+        </div>
+    </div>
+
+    <!-- MODAL: Kép nagyítása -->
+    <div id="imageLightboxModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 cursor-pointer" onclick="this.classList.add('hidden')">
+        <div class="relative max-w-full max-h-[90vh] flex flex-col items-center" onclick="event.stopPropagation()">
+            <img id="lightboxImage" src="" alt="Nagyított kép" class="max-w-full max-h-[80vh] rounded-lg shadow-2xl object-contain border border-white/10">
+            <button onclick="document.getElementById('imageLightboxModal').classList.add('hidden')" class="absolute -top-10 right-0 text-white text-sm font-semibold bg-black/40 px-3 py-1.5 rounded-lg hover:bg-black/60 transition-colors">✕ Bezárás</button>
+        </div>
+    </div>
+
+    <!-- MODAL: Elfelejtett jelszó és visszaállítás -->
+    <div id="forgotPasswordModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-2xl w-full max-w-sm shadow-xl">
+            <div id="forgotStep1">
+                <h3 class="font-bold text-lg mb-2 text-indigo-600">Jelszó-visszaállítás</h3>
+                <p class="text-xs text-gray-500 mb-4 leading-relaxed">Add meg a regisztrált e-mail címedet, és elküldünk egy 6-jegyű visszaállítási kódot.</p>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-xs font-semibold text-gray-600">E-mail cím</label>
+                        <input type="email" id="forgotEmail" class="w-full border p-2.5 rounded-lg focus:outline-indigo-500 text-sm">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-5">
+                    <button onclick="document.getElementById('forgotPasswordModal').classList.add('hidden')" class="px-4 py-2 text-gray-600 text-sm font-medium">Mégse</button>
+                    <button onclick="sendForgotCode()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium shadow hover:bg-indigo-700">Kód küldése</button>
+                </div>
+            </div>
+            
+            <div id="forgotStep2" class="hidden">
+                <h3 class="font-bold text-lg mb-2 text-indigo-600">Új jelszó megadása</h3>
+                <p class="text-xs text-gray-500 mb-4 leading-relaxed">Írd be az e-mailben kapott 6-jegyű ellenőrző kódot és az új, biztonságos jelszavadat.</p>
+                <div class="space-y-3 text-left">
+                    <div>
+                        <label class="text-xs font-semibold text-gray-600">E-mail cím</label>
+                        <input type="email" id="resetEmail" disabled class="w-full border p-2.5 rounded-lg bg-gray-50 text-sm font-semibold text-gray-700">
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-gray-600 text-center block">6-jegyű ellenőrző kód</label>
+                        <input type="text" id="resetToken" maxlength="6" placeholder="123456" class="w-full border p-2.5 rounded-lg focus:outline-indigo-500 text-center font-mono font-bold tracking-widest text-lg">
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-gray-600">Új jelszó</label>
+                        <input type="password" id="resetNewPassword" class="w-full border p-2.5 rounded-lg focus:outline-indigo-500 text-sm">
+                        <p class="text-[10px] text-gray-500 mt-1 leading-relaxed">Min. 6 karakter, kis- és nagybetű (a-z, A-Z), valamint speciális karakter (pl. !@#$).</p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-5">
+                    <button onclick="forgotBackToStep1()" class="px-4 py-2 text-gray-600 text-sm font-medium">Vissza</button>
+                    <button onclick="submitResetPassword()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium shadow hover:bg-green-700">Jelszó mentése</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentAuthMode = 'login';
+        let currentBox = null;
+        let currentItems = [];
+        let html5QrCode = null;
+        let isScannerRunning = false;
+        let searchTimeout = null;
+        const imageBlobUrls = new Set();
+
+        function getToken() { return localStorage.getItem('token'); }
+
+        function escapeHtml(str) {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function authHeaders(extra = {}) {
+            return { ...extra, Authorization: `Bearer ${getToken()}` };
+        }
+
+        function normalizePhotoPath(photoUrl) {
+            if (!photoUrl) return null;
+            if (photoUrl.startsWith('/api/uploads/')) return photoUrl;
+            if (photoUrl.startsWith('/uploads/')) return photoUrl.replace('/uploads/', '/api/uploads/');
+            return photoUrl;
+        }
+
+        function openImageLightbox(src) {
+            if (!src) return;
+            const modal = document.getElementById('imageLightboxModal');
+            const img = document.getElementById('lightboxImage');
+            img.src = src;
+            modal.classList.remove('hidden');
+        }
+
+        async function setAuthImage(imgEl, photoUrl) {
+            const path = normalizePhotoPath(photoUrl);
+            if (!path) return;
+            try {
+                const res = await fetch(path, { headers: authHeaders() });
+                if (!res.ok) return;
+                const blobUrl = URL.createObjectURL(await res.blob());
+                imageBlobUrls.add(blobUrl);
+                imgEl.src = blobUrl;
+            } catch (_) { /* ignore */ }
+        }
+
+        function revokeImageBlobUrls() {
+            imageBlobUrls.forEach(url => URL.revokeObjectURL(url));
+            imageBlobUrls.clear();
+        }
+
+        function switchAuthTab(mode) {
+            currentAuthMode = mode;
+            const loginBtn = document.getElementById('loginTabBtn');
+            const regBtn = document.getElementById('regTabBtn');
+            const submitBtn = document.getElementById('authSubmitBtn');
+            const emailWrapper = document.getElementById('emailFieldWrapper');
+            const passwordHint = document.getElementById('passwordHintWrapper');
+            const forgotLink = document.getElementById('forgotPasswordLinkWrapper');
+            const authEmailInput = document.getElementById('authEmail');
+            
+            if (mode === 'login') {
+                loginBtn.className = 'flex-1 py-2 font-semibold border-b-2 border-indigo-600 text-indigo-600';
+                regBtn.className = 'flex-1 py-2 font-semibold text-gray-400';
+                submitBtn.innerText = 'Bejelentkezés';
+                emailWrapper.classList.add('hidden');
+                passwordHint.classList.add('hidden');
+                forgotLink.classList.remove('hidden');
+                authEmailInput.removeAttribute('required');
+            } else {
+                regBtn.className = 'flex-1 py-2 font-semibold border-b-2 border-indigo-600 text-indigo-600';
+                loginBtn.className = 'flex-1 py-2 font-semibold text-gray-400';
+                submitBtn.innerText = 'Regisztráció és Belépés';
+                emailWrapper.classList.remove('hidden');
+                passwordHint.classList.remove('hidden');
+                forgotLink.classList.add('hidden');
+                authEmailInput.setAttribute('required', '');
+            }
+        }
+
+        async function handleAuth(e) {
+            e.preventDefault();
+            const username = document.getElementById('authUsername').value;
+            const password = document.getElementById('authPassword').value;
+            const email = document.getElementById('authEmail').value;
+            const url = currentAuthMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+
+            const payload = { username, password };
+            if (currentAuthMode === 'register') {
+                payload.email = email;
+            }
+
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('username', data.username);
+                initApp();
+            } else {
+                alert(data.error || 'Hiba a belépés során');
+            }
+        }
+
+        function openForgotPassword() {
+            document.getElementById('forgotEmail').value = '';
+            document.getElementById('resetEmail').value = '';
+            document.getElementById('resetToken').value = '';
+            document.getElementById('resetNewPassword').value = '';
+            
+            document.getElementById('forgotStep1').classList.remove('hidden');
+            document.getElementById('forgotStep2').classList.add('hidden');
+            document.getElementById('forgotPasswordModal').classList.remove('hidden');
+        }
+
+        function forgotBackToStep1() {
+            document.getElementById('forgotStep1').classList.remove('hidden');
+            document.getElementById('forgotStep2').classList.add('hidden');
+        }
+
+        async function sendForgotCode() {
+            const email = document.getElementById('forgotEmail').value.trim();
+            if (!email) return alert('Kérlek add meg az e-mail címedet!');
+
+            const res = await fetch('/api/auth/forgot-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert(data.message);
+                document.getElementById('resetEmail').value = email;
+                document.getElementById('forgotStep1').classList.add('hidden');
+                document.getElementById('forgotStep2').classList.remove('hidden');
+            } else {
+                alert(data.error || 'Hiba a kód küldésekor');
+            }
+        }
+
+        async function submitResetPassword() {
+            const email = document.getElementById('resetEmail').value.trim();
+            const token = document.getElementById('resetToken').value.trim();
+            const newPassword = document.getElementById('resetNewPassword').value;
+
+            if (!token || token.length !== 6) return alert('Kérlek add meg a 6-jegyű ellenőrző kódot!');
+            if (!newPassword) return alert('Kérlek add meg az új jelszavadat!');
+
+            const res = await fetch('/api/auth/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, token, newPassword })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert(data.message);
+                document.getElementById('forgotPasswordModal').classList.add('hidden');
+            } else {
+                alert(data.error || 'Hiba a jelszó visszaállításakor');
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            location.reload();
+        }
+
+        function switchAppTab(tab) {
+            const homeTab = document.getElementById('tabHome');
+            const boxesTab = document.getElementById('tabBoxes');
+            const navHome = document.getElementById('navHomeBtn');
+            const navBoxes = document.getElementById('navBoxesBtn');
+
+            if (tab === 'home') {
+                homeTab.classList.remove('hidden');
+                boxesTab.classList.add('hidden');
+                navHome.className = 'flex flex-col items-center text-indigo-600 font-medium text-xs';
+                navBoxes.className = 'flex flex-col items-center text-gray-400 font-medium text-xs';
+            } else {
+                homeTab.classList.add('hidden');
+                boxesTab.classList.remove('hidden');
+                navBoxes.className = 'flex flex-col items-center text-indigo-600 font-medium text-xs';
+                navHome.className = 'flex flex-col items-center text-gray-400 font-medium text-xs';
+                loadBoxesList();
+            }
+        }
+
+        async function loadBoxesList() {
+            const res = await fetch('/api/boxes', { headers: authHeaders() });
+            if (!res.ok) return;
+            const boxes = await res.json();
+            document.getElementById('boxCount').innerText = boxes.length;
+            const container = document.getElementById('allBoxesList');
+
+            if (!boxes.length) {
+                container.innerHTML = '<p class="text-center text-gray-400 py-6">Még nincs felvéve egyetlen doboz sem.</p>';
+                return;
+            }
+
+            container.innerHTML = boxes.map(b => `
+                <div class="bg-white p-4 rounded-xl shadow border border-slate-100 flex justify-between items-center cursor-pointer hover:border-indigo-200 box-list-item"
+                     data-box-code="${escapeHtml(b.code)}">
+                    <div>
+                        <h3 class="font-bold text-slate-800">${escapeHtml(b.name)}</h3>
+                        <p class="text-xs text-gray-500">📍 ${escapeHtml(b.location || 'Nincs hely')}</p>
+                        ${b.description ? `<p class="text-xs italic text-gray-500 mt-1">${escapeHtml(b.description)}</p>` : ''}
+                        <p class="text-[11px] font-mono text-gray-400 mt-1">${escapeHtml(b.code)}</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="inline-block bg-indigo-50 text-indigo-700 text-xs px-2.5 py-1 rounded-full font-semibold">
+                            ${b.total_items} tétel (${b.total_quantity} db)
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+
+            container.querySelectorAll('.box-list-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    switchAppTab('home');
+                    loadBox(el.dataset.boxCode);
+                });
+            });
+        }
+
+        async function toggleScanner() {
+            const readerDiv = document.getElementById('reader');
+            if (!isScannerRunning) {
+                readerDiv.classList.remove('hidden');
+                html5QrCode = new Html5Qrcode("reader");
+                try {
+                    await html5QrCode.start(
+                        { facingMode: "environment" },
+                        { fps: 10, qrbox: 250 },
+                        async (decodedText) => {
+                            await stopScanner();
+                            loadBox(decodedText);
+                        }
+                    );
+                    isScannerRunning = true;
+                } catch (err) {
+                    alert("Kamera hiba: " + err);
+                    readerDiv.classList.add('hidden');
+                }
+            } else {
+                await stopScanner();
+            }
+        }
+
+        async function stopScanner() {
+            if (html5QrCode && isScannerRunning) {
+                try { await html5QrCode.stop(); } catch(e){}
+                isScannerRunning = false;
+            }
+            document.getElementById('reader').classList.add('hidden');
+        }
+
+        function showNewBoxModal() {
+            document.getElementById('editBoxId').value = '';
+            document.getElementById('boxModalTitle').innerText = 'Új doboz felvétele';
+            document.getElementById('boxNameInput').value = '';
+            document.getElementById('boxLocInput').value = '';
+            document.getElementById('boxDescInput').value = '';
+            document.getElementById('boxCustomCodeInput').value = '';
+            document.getElementById('customCodeWrapper').classList.remove('hidden');
+            document.getElementById('boxModal').classList.remove('hidden');
+        }
+
+        function openEditBoxModal() {
+            if (!currentBox) return;
+            document.getElementById('editBoxId').value = currentBox.id;
+            document.getElementById('boxModalTitle').innerText = 'Tároló adatainak szerkesztése';
+            document.getElementById('boxNameInput').value = currentBox.name;
+            document.getElementById('boxLocInput').value = currentBox.location || '';
+            document.getElementById('boxDescInput').value = currentBox.description || '';
+            document.getElementById('customCodeWrapper').classList.add('hidden');
+            document.getElementById('boxModal').classList.remove('hidden');
+        }
+
+        async function saveBox() {
+            const editId = document.getElementById('editBoxId').value;
+            const name = document.getElementById('boxNameInput').value;
+            const location = document.getElementById('boxLocInput').value;
+            const description = document.getElementById('boxDescInput').value;
+            const code = document.getElementById('boxCustomCodeInput').value;
+            
+            if (!name) return alert("A doboz neve kötelező!");
+
+            let url = '/api/boxes';
+            let method = 'POST';
+            let payload = { name, location, description, code: code || undefined };
+
+            if (editId) {
+                url = `/api/boxes/${editId}`;
+                method = 'PUT';
+                payload = { name, location, description };
+            }
+
+            const res = await fetch(url, {
+                method,
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('boxModal').classList.add('hidden');
+                loadBox(currentBox ? currentBox.code : data.code);
+            } else {
+                alert(data.error || 'Hiba mentéskor');
+            }
+        }
+
+        async function loadBox(code) {
+            const res = await fetch(`/api/boxes/by-code/${encodeURIComponent(code)}`, {
+                headers: authHeaders()
+            });
+            if (!res.ok) return alert("Ez a QR kód még nincs rögzítve!");
+            
+            const data = await res.json();
+            currentBox = data.box;
+            currentItems = data.items || [];
+            
+            document.getElementById('boxView').classList.remove('hidden');
+            document.getElementById('boxTitle').innerText = currentBox.name;
+            document.getElementById('boxLocation').innerText = currentBox.location ? '📍 ' + currentBox.location : 'Nincs hely megadva';
+            document.getElementById('boxCode').innerText = 'Kód: ' + currentBox.code;
+
+            const descElem = document.getElementById('boxDescription');
+            if (currentBox.description) {
+                descElem.innerText = 'Megjegyzés: ' + currentBox.description;
+                descElem.classList.remove('hidden');
+            } else {
+                descElem.classList.add('hidden');
+            }
+
+            renderItems(currentItems);
+        }
+
+        function renderItems(items) {
+            revokeImageBlobUrls();
+            const container = document.getElementById('itemList');
+            container.innerHTML = '';
+
+            if (!items.length) {
+                container.innerHTML = '<p class="text-gray-400 text-center py-4">A doboz üres.</p>';
+                return;
+            }
+
+            items.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center gap-3 p-3 bg-gray-50 rounded-lg border';
+
+                if (item.photo_url) {
+                    const img = document.createElement('img');
+                    img.className = 'w-12 h-12 rounded object-cover cursor-pointer hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md';
+                    img.alt = item.name;
+                    setAuthImage(img, item.photo_url);
+                    img.addEventListener('click', () => openImageLightbox(img.src));
+                    row.appendChild(img);
+                }
+
+                const info = document.createElement('div');
+                info.className = 'flex-1';
+                info.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm text-slate-800">${escapeHtml(item.name)}</h4>
+                        <button class="edit-item-btn text-xs text-indigo-600 p-1 font-semibold">✏️ Módosítás</button>
+                    </div>
+                    <p class="text-xs text-gray-500">${escapeHtml(item.category || '-')} | Állapot: ${escapeHtml(item.item_condition || '-')}</p>
+                    ${item.description ? `<p class="text-xs italic text-gray-600 mt-1">${escapeHtml(item.description)}</p>` : ''}
+                `;
+                info.querySelector('.edit-item-btn').addEventListener('click', () => openEditItemModal(item.id));
+                row.appendChild(info);
+
+                const qty = document.createElement('div');
+                qty.className = 'flex items-center gap-2 ml-1';
+                const minusBtn = document.createElement('button');
+                minusBtn.className = 'w-7 h-7 bg-red-100 text-red-700 font-bold rounded';
+                minusBtn.textContent = '-';
+                minusBtn.addEventListener('click', () => changeQty(item.id, -1));
+                const qtySpan = document.createElement('span');
+                qtySpan.className = 'font-bold text-sm min-w-6 text-center';
+                qtySpan.textContent = item.quantity;
+                const plusBtn = document.createElement('button');
+                plusBtn.className = 'w-7 h-7 bg-green-100 text-green-700 font-bold rounded';
+                plusBtn.textContent = '+';
+                plusBtn.addEventListener('click', () => changeQty(item.id, 1));
+                qty.append(minusBtn, qtySpan, plusBtn);
+                row.appendChild(qty);
+
+                container.appendChild(row);
+            });
+        }
+
+        function showAddItemModal() {
+            document.getElementById('editItemId').value = '';
+            document.getElementById('itemModalTitle').innerText = 'Tárgy hozzáadása';
+            document.getElementById('deleteItemBtn').classList.add('hidden');
+            document.getElementById('itemForm').reset();
+            document.getElementById('itemModal').classList.remove('hidden');
+        }
+
+        function openEditItemModal(id) {
+            const item = currentItems.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('editItemId').value = item.id;
+            document.getElementById('itemModalTitle').innerText = 'Tárgy adatainak szerkesztése';
+            document.getElementById('deleteItemBtn').classList.remove('hidden');
+            document.getElementById('itemName').value = item.name;
+            document.getElementById('itemQty').value = item.quantity;
+            document.getElementById('itemCat').value = item.category || '';
+            document.getElementById('itemCond').value = item.item_condition || '';
+            document.getElementById('itemDesc').value = item.description || '';
+
+            document.getElementById('itemModal').classList.remove('hidden');
+        }
+
+        async function submitItemForm() {
+            if (!currentBox) return;
+            const form = document.getElementById('itemForm');
+            const formData = new FormData(form);
+            const editId = document.getElementById('editItemId').value;
+
+            let url = '/api/items';
+            let method = 'POST';
+
+            if (editId) {
+                url = `/api/items/${editId}`;
+                method = 'PUT';
+            } else {
+                formData.append('box_id', currentBox.id);
+            }
+
+            const res = await fetch(url, {
+                method,
+                headers: authHeaders(),
+                body: formData
+            });
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('itemModal').classList.add('hidden');
+                loadBox(currentBox.code);
+            } else {
+                alert(data.error || 'Hiba a mentéskor');
+            }
+        }
+
+        async function changeQty(id, change) {
+            const res = await fetch(`/api/items/${id}/quantity`, {
+                method: 'PATCH',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ change })
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                alert(data.error || 'Hiba a mennyiség módosításakor');
+                return;
+            }
+            loadBox(currentBox.code);
+        }
+
+        async function deleteBox() {
+            if (!currentBox) return;
+            if (!confirm(`Biztosan törlöd a „${currentBox.name}” dobozt és minden tartalmát?`)) return;
+
+            const res = await fetch(`/api/boxes/${currentBox.id}`, {
+                method: 'DELETE',
+                headers: authHeaders()
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) return alert(data.error || 'Hiba a doboz törlésekor');
+
+            currentBox = null;
+            currentItems = [];
+            document.getElementById('boxView').classList.add('hidden');
+            loadBoxesList();
+        }
+
+        async function deleteItem() {
+            const editId = document.getElementById('editItemId').value;
+            if (!editId) return;
+            if (!confirm('Biztosan törlöd ezt a tárgyat?')) return;
+
+            const res = await fetch(`/api/items/${editId}`, {
+                method: 'DELETE',
+                headers: authHeaders()
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) return alert(data.error || 'Hiba a tárgy törlésekor');
+
+            document.getElementById('itemModal').classList.add('hidden');
+            loadBox(currentBox.code);
+        }
+
+        function showQRCode() {
+            document.getElementById('qrcodeCanvas').innerHTML = '';
+            new QRCode(document.getElementById('qrcodeCanvas'), {
+                text: currentBox.code,
+                width: 200,
+                height: 200
+            });
+            document.getElementById('qrModal').classList.remove('hidden');
+        }
+
+        function searchItems(q) {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => runSearch(q), 300);
+        }
+
+        async function runSearch(q) {
+            const container = document.getElementById('searchResults');
+            if (!q || q.length < 2) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+                headers: authHeaders()
+            });
+            if (!res.ok) return;
+            const items = await res.json();
+
+            container.innerHTML = items.map(item => `
+                <div class="py-2 flex justify-between items-center cursor-pointer hover:bg-slate-50 px-2 rounded search-result-item"
+                     data-box-code="${escapeHtml(item.box_code)}">
+                    <div>
+                        <span class="font-bold text-sm">${escapeHtml(item.name)}</span> (${item.quantity} db)
+                        <div class="text-xs text-gray-500">📍 ${escapeHtml(item.box_name)} (${escapeHtml(item.box_location || 'Nincs hely')})</div>
+                    </div>
+                    <span class="text-xs text-indigo-600 font-semibold">Ugrás ➔</span>
+                </div>
+            `).join('');
+
+            container.querySelectorAll('.search-result-item').forEach(el => {
+                el.addEventListener('click', () => loadBox(el.dataset.boxCode));
+            });
+        }
+
+        function initApp() {
+            const token = getToken();
+            if (token) {
+                document.getElementById('authScreen').classList.add('hidden');
+                document.getElementById('appScreen').classList.remove('hidden');
+                document.getElementById('bottomNav').classList.remove('hidden');
+                document.getElementById('displayUsername').innerText = localStorage.getItem('username') || '';
+            } else {
+                document.getElementById('authScreen').classList.remove('hidden');
+                document.getElementById('appScreen').classList.add('hidden');
+                document.getElementById('bottomNav').classList.add('hidden');
+            }
+        }
+
+        initApp();
+    </script>
+</body>
+</html>
